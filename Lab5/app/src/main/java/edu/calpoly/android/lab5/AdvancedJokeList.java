@@ -30,26 +30,22 @@ import android.widget.Toast;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
 
 import edu.calpoly.android.lab4.R;
 import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
 
 public class AdvancedJokeList extends AppCompatActivity {
 
     /**
      * This holds all of the jokes downloaded from specifed url.
      */
-    //ArrayList<String> allJokes = new ArrayList<>();
     ArrayMap<String, Integer> allJokes = new ArrayMap<>();
+    protected ArrayList<Joke> downloadedJokes;
 
     /**
      * Contains the name of the Author for the jokes.
@@ -148,6 +144,7 @@ public class AdvancedJokeList extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         this.m_arrJokeList = new ArrayList<>();
         this.m_arrFilteredJokeList = new ArrayList<>();
+        this.downloadedJokes = new ArrayList<>();
 
         this.m_jokeAdapter = new JokeListAdapter(this, this.m_arrFilteredJokeList);
         this.m_strAuthorName = this.getResources().getString(R.string.author_name);
@@ -195,6 +192,7 @@ public class AdvancedJokeList extends AppCompatActivity {
                 Joke jokeToManipulate = m_arrJokeList.get(index);
 
                 if (direction == ItemTouchHelper.LEFT) {
+
                     String uploadJoke = jokeToManipulate.getJoke();
                     new UploadToServer().execute(uploadJoke);
 
@@ -205,7 +203,7 @@ public class AdvancedJokeList extends AppCompatActivity {
                     Toast.makeText(AdvancedJokeList.this, "Joke Deleted", Toast.LENGTH_SHORT).show();
                     m_arrFilteredJokeList.remove(index);
 
-                    Log.w("aagrover", "index removed:" + index);
+                    //Log.w("aagrover", "index removed:" + index);
                     removeJoke(jokeToManipulate);
 
                     m_jokeAdapter.notifyItemRemoved(index);
@@ -263,9 +261,14 @@ public class AdvancedJokeList extends AppCompatActivity {
      * @param joke The Joke to add to list of Jokes.
      */
     protected void addJoke(Joke joke) {
-        this.m_arrJokeList.add(joke);
-        m_arrFilteredJokeList.add(joke);
-        this.m_jokeAdapter.notifyDataSetChanged();
+
+        Log.w("contains joke?", "" + downloadedJokes.contains(joke));
+        Log.w("joke is", "" + joke);
+        if (!m_arrJokeList.contains(joke)) {
+            this.m_arrJokeList.add(joke);
+            this.m_arrFilteredJokeList.add(joke);
+            this.m_jokeAdapter.notifyDataSetChanged();
+        }
     }
 
     @Override
@@ -288,6 +291,25 @@ public class AdvancedJokeList extends AppCompatActivity {
                 return true;
 
             case R.id.submenu_download_jokes:
+
+                if (!downloadedJokes.isEmpty()) {
+                    Log.w("downloadedJokes size", "is " + downloadedJokes.size());
+                    int size = downloadedJokes.size();
+
+                    int delete = size - 1;
+
+                    while (delete != -1) {
+                        Log.w("deleting joke number", "" +  delete);
+
+                        removeJoke(downloadedJokes.get(delete));
+                        delete--;
+                    }
+
+                    Log.w("downloadedJokes size", "is " + downloadedJokes.size());
+
+                    allJokes.clear();
+                    this.m_jokeAdapter.notifyDataSetChanged();
+                }
 
                 Toast.makeText(AdvancedJokeList.this, "Downloading Jokes", Toast.LENGTH_SHORT).show();
 
@@ -352,7 +374,7 @@ public class AdvancedJokeList extends AppCompatActivity {
         for (Joke j : this.m_arrFilteredJokeList) {
             //Has the joke in it already, need rating change
             if (this.m_arrJokeList.contains(j)) {
-                Log.w("syncFilter..", "joke: " + j.getRating());
+                //Log.w("syncFilter..", "joke: " + j.getRating());
                 this.m_arrJokeList.get(this.m_arrJokeList.indexOf(j)).setRating(j.getRating());
             }
         }
@@ -361,6 +383,7 @@ public class AdvancedJokeList extends AppCompatActivity {
     protected void removeJoke(Joke jv) {
         this.m_arrFilteredJokeList.remove(jv);
         this.m_arrJokeList.remove(jv);
+        this.downloadedJokes.remove(jv);
         this.m_jokeAdapter.notifyDataSetChanged();
     }
 
@@ -485,14 +508,19 @@ public class AdvancedJokeList extends AppCompatActivity {
                 e.printStackTrace();
             }
 
-            return allJokes.keyAt(0);
+            return "";
         }
 
         protected void onPostExecute(String jokes) {
 
+            Joke newJoke;
+
             for (int addJoke = 0; addJoke < allJokes.size(); addJoke++) {
                 if (!allJokes.keyAt(addJoke).equals("")) {
-                    addJoke(new Joke(allJokes.keyAt(addJoke), ""));
+                    newJoke = new Joke(allJokes.keyAt(addJoke), "");
+                    addJoke(newJoke);
+                    downloadedJokes.add(newJoke);
+                    m_jokeAdapter.notifyDataSetChanged();
                 }
             }
         }
@@ -507,17 +535,18 @@ public class AdvancedJokeList extends AppCompatActivity {
         protected String doInBackground(String... params) {
 
             URL url = null;
-            HttpURLConnection connection = null;
-
-            OkHttpClient client = new OkHttpClient();
 
             try {
-                url = new URL("http://simexusa.com/aac/addOneJoke.php");
-                RequestBody body = RequestBody.create(JSON, "{Joke:Why did the chicken cross the road?, Author:someone}");
-                Request request = new Request.Builder().url(url).post(body).build();
-                Response response = client.newCall(request).execute();
 
-                Log.w("RESPONSE", "" + response);
+                String theUrl = "http://simexusa.com/aac/addOneJoke.php?" + "joke=" +
+                        URLEncoder.encode(params[0], "UTF-8") + "&author=" +
+                        URLEncoder.encode(m_strAuthorName, "UTF-8");
+
+                url = new URL(theUrl);
+
+                url.openStream();
+
+                Log.w("URL", theUrl);
             } catch (IOException e) {
                 e.printStackTrace();
             }
